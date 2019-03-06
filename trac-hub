@@ -1,7 +1,7 @@
 #!/usr/bin/env ruby
 
 require 'json'
-require 'logger'
+require 'logging'
 require 'rest-client'
 require 'optparse'
 require 'sequel'
@@ -320,6 +320,7 @@ class Migrator
   end
 
   def markdownify(str)
+    $logger.debug("Markdownifying #{str}")
     # Line endings
     str.gsub!("\r\n", "\n")
     # CommitTicketReference
@@ -349,8 +350,11 @@ class Migrator
     str.gsub!(/\[changeset:"r(\d+)".*\]/, '[changeset:\1]')
     str.gsub!(/\[changeset:r(\d+)\]/,     '[changeset:\1]')
     str.gsub!(/\[changeset:"(\d+)".*\]/) { map_changeset(Regexp.last_match[1]) }
+    $logger.debug("Markdownify found rev type 1, replacing to #{str}")
     str.gsub!(/\[changeset:(\d+)\]/)     { map_changeset(Regexp.last_match[1]) }
-    str.gsub!(/\br(\d+)\b/)              { map_changeset(Regexp.last_match[1]) }
+    $logger.debug("Markdownify found rev type 2, replacing to #{str}")
+    #str.gsub!(/\br(\d+)\b/)              { map_changeset(Regexp.last_match[1]) }
+    #$logger.debug("Markdownify found rev type 3, replacing to #{str}")
     # Ticket
     str.gsub!(/ticket:(\d+)/, '#\1')
     # set the body as a comment
@@ -387,6 +391,10 @@ class Options < Hash
       opts.on('-s', '--start-at ID', 'start migration from ticket with number <ID>') do |id|
         self[:start] = id
       end
+      opts.on('-l', '--log-file FILE',
+        'allows to also log to FILE') do |logfile|
+        self[:logfile] = logfile
+end
       opts.on('-r', '--rev-map-file FILE',
               'allows to specify a commit revision mapping FILE') do |file|
         self[:revmapfile] = file
@@ -431,12 +439,16 @@ if __FILE__ == $0
   cfg = YAML.load_file(opts[:config])
 
   # Setup logger.
-  $logger = Logger.new(STDERR)
-  $logger.level = opts[:verbose] ? Logger::DEBUG : Logger::INFO
-  $logger.formatter = proc do |severity, datetime, progname, msg|
-    time = datetime.strftime('%Y-%m-%d %H:%M:%S')
-    "[#{time}] #{severity}#{' ' * (5 - severity.size + 1)}| #{msg}\n"
+  $logger = Logging.logger['trac-hub-logger']
+  $logger.add_appenders(Logging.appenders.stderr)
+  if opts[:logfile]
+    $logger.add_appenders(Logging.appenders.rolling_file(opts[:logfile],:age => 3600))
   end
+  $logger.level = opts[:verbose] ? :debug : :info
+  #$logger.formatter = proc do |severity, datetime, progname, msg|
+  #  time = datetime.strftime('%Y-%m-%d %H:%M:%S')
+  #  "[#{time}] #{severity}#{' ' * (5 - severity.size + 1)}| #{msg}\n"
+  #end
 
   # Setup database.
   db = nil

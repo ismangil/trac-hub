@@ -5,9 +5,14 @@ GEM
       unf (>= 0.0.5, < 1.0.0)
     http-cookie (1.0.3)
       domain_name (~> 0.5)
+    little-plugger (1.1.4)
+    logging (2.2.2)
+      little-plugger (~> 1.1)
+      multi_json (~> 1.10)
     mime-types (3.1)
       mime-types-data (~> 3.2015)
     mime-types-data (3.2016.0521)
+    multi_json (1.13.1)
     mysql2 (0.4.6)
     netrc (0.11.0)
     rest-client (2.0.2)
@@ -24,10 +29,11 @@ PLATFORMS
   ruby
 
 DEPENDENCIES
+  logging
   mysql2
   rest-client
   sequel
   sqlite3
 
 BUNDLED WITH
-   1.15.1
+   2.0.1
