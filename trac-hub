@@ -259,7 +259,12 @@ class Migrator
 
       if @safetychecks
         while response["status"] == "pending"
-          sleep 2 # bennylp
+          # bennylp
+          if @singlepost
+            sleep 1
+          else
+            sleep 2
+          end
           $logger.info("Checking import status: #{response['id']}")
           response = JSON.parse(RestClient.get(response['url'], {
             "Authorization" => "token #{@token}",
@@ -378,7 +383,7 @@ class Migrator
       if @users.has_key?(assignee) 
          assignee = @users[assignee]
          issue['assignee'] = assignee
-         puts "assignee set to #{assignee}"
+         $logger.debug("assignee set to #{assignee}")
       else
          puts "User #{assignee} not found"
       end
