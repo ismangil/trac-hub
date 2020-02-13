@@ -1,0 +1,56 @@
+trac:
+  database: sqlite://trac.db
+  url: https://trac.pjsip.org/repos
+
+github:
+  repo: 'githubuser/testrepo'
+  token: ''
+
+users:
+  nanang: nanangizz
+  bennylp: bennylp
+  ismangil: ismangil
+  ming: mingteluu
+  riza: trengginas
+
+labels:
+  type:
+    defect:             'type: bug'
+    task:               'type: task'
+    enhancement:        'type: enhancement'
+  
+  component:
+    applications:       'component: applications'
+    common:             'component: common'
+    pjlib:              'component: pjlib'
+    pjlib-util:         'component: pjlib-util'
+    pjmedia:            'component: pjmedia'
+    pjmedia-audiodev:   'component: pjmedia-audiodev'
+    pjmedia-videodev:   'component: pjmedia-videodev'
+    pjnath:             'component: pjnath'
+    pjsip:              'component: pjsip'
+    pjsua-lib:          'component: pjsua-lib'
+    pjsua2:             'component: pjsua2'
+    python:             'component: python'
+    third-party:        'component: third-party'
+    unit-tests:         'component: unit-tests'
+
+  resolution:
+    invalid:            'resolution: invalid'
+    duplicate:          'resolution: duplicate'
+    wontfix:            'resolution: wontfix'
+    worksforme:         'resolution: worksforme'
+#   fixed: is deprecated
+
+  priority:
+    low:                'priority: low'
+    high:               'priority: high'
+    blocker:            'priority: high'
+    critical:           'priority: high'
+    major:              'priority: high'
+    minor:              'priority: low'
+    trivial:            'priority: low'
+#   normal: is deprecated
+
+#  version: is deprecated
+
