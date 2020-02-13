@@ -128,4 +128,4 @@ with `bundle exec trac-hub`, e.g.:
 License
 -------
 
-trac-hub comes with a [BSD-style licence](COPYING).
+trac-hub comes with a [BSD-style licence](COPYING)
