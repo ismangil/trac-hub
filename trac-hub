@@ -459,6 +459,9 @@ class Migrator
 
     # URL to wiki
     str.gsub!(/\[wiki:([^\s]+) (.*)\]/, "[\\2](#{@trac.url}/wiki/\\1)")
+
+    # [[BR]] to <BR />
+    str.gsub!(/\[\[BR\]\]/i, "<BR />")
     
     # Ticket
     str.gsub!(/ticket:(\d+)/, '#\1')
