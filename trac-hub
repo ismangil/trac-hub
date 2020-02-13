@@ -91,8 +91,10 @@ class Migrator
   def trac_mail(author)
     return @trac_mails_cache[author] if @trac_mails_cache.has_key?(author)
     # tries to retrieve the email from trac db
-    data = @trac.sessions.select(:value).where('name = "email" AND sid = ?', author)
-    return (@trac_mails_cache[author] = data.first[:value]) if data.count == 1
+    # bennylp:
+    #data = @trac.sessions.select(:value).where('name = "email" AND sid = ?', author)
+    #data = @trac.sessions.select(:value).where("sid = '?'", author)
+    #return (@trac_mails_cache[author] = data.first[:value]) if data.count == 1
     return (@trac_mails_cache[author] = author) # not found
   end
 
@@ -191,7 +193,7 @@ class Migrator
 
       if @safetychecks
         while response["status"] == "pending"
-          sleep 0.1
+          sleep 2 # bennylp
           $logger.info("Checking import status: #{response['id']}")
           response = JSON.parse(RestClient.get(response['url'], {
             "Authorization" => "token #{@token}",
@@ -241,6 +243,27 @@ class Migrator
 
     # combine the changes and attachment table results and sort them by date
     changes = @trac.changes.where(:ticket => ticket[:id]).collect.to_a
+    
+    # bennylp:
+    # Find assignee first before the comment is markdownified
+    assignee = ''
+    first_commenter = ''
+    changes.each do |x|
+      if first_commenter == ''
+        first_commenter = x[:author]
+        #puts "First commenter: #{first_commenter}"
+      end
+      # Find assignee: first one to comment with revision number
+      if assignee=="" and x[:field] == "comment"
+        s = x[:newvalue]
+        if s =~ /r[0-9]+|\[[0-9]+\]|\[changeset:/
+          assignee = x[:author]
+          #puts "Found assignee: #{assignee}\n"
+          break
+        end
+      end
+    end
+      
     changes += @trac.attachments.where(:type => 'ticket', :id => ticket[:id]).collect.to_a
     changes = changes.sort_by{|x| x[:time]}
 
@@ -278,6 +301,21 @@ class Migrator
       "created_at" => format_time(ticket[:time]),
     }
 
+    # bennylp:
+    # Assign the ticket to whoever comment with revision, else whoever comment first
+    if assignee == '' and first_commenter != ''
+      assignee = first_commenter
+    end
+    if assignee != ''
+      if @users.has_key?(assignee) 
+         assignee = @users[assignee]
+         issue['assignee'] = assignee
+         puts "assignee set to #{assignee}"
+      else
+         puts "User #{assignee} not found"
+      end
+    end
+    
     if ticket[:changetime]
       issue["updated_at"] = format_time(ticket[:changetime])
     end
