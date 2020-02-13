@@ -4,5 +4,6 @@ gem 'sqlite3'
 gem 'mysql2'
 gem 'rest-client'
 gem 'logging'
+gem "octokit", "~> 4.0"
 
 

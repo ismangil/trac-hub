@@ -9,6 +9,7 @@ require 'yaml'
 require 'set'
 require 'singleton'
 require 'uri'
+require 'octokit'
 
 class GracefulQuit
   include Singleton
@@ -37,7 +38,7 @@ class GracefulQuit
 end
 
 class Migrator
-  def initialize(trac, github, users, labels, revmap, attachurl, singlepost, safetychecks)
+  def initialize(trac, github, users, labels, revmap, attachurl, singlepost, safetychecks, importmilestone)
     @trac = trac
     @repo = github['repo']
     @token = github["token"]
@@ -66,6 +67,11 @@ class Migrator
     @attachurl = attachurl
     @singlepost = singlepost
     @safetychecks = safetychecks
+    @importmilestone =  importmilestone
+    @milestonemap = {}
+
+    @github_client = Octokit::Client.new(:access_token => @token)
+    @github_client.auto_paginate = true
   end
 
   def migrate(start_ticket = -1, filterout_closed = false)
@@ -73,6 +79,9 @@ class Migrator
       start_ticket = @last_created_issue+1
     end
     GracefulQuit.enable
+    if @importmilestone
+      migrate_milestones()
+    end
     migrate_tickets(start_ticket, filterout_closed)
   end
 
@@ -100,6 +109,53 @@ class Migrator
   def format_time(time)
     time = Time.at(time/1e6, time%1e6)
     return time.strftime("%FT%TZ")
+  end
+
+  # Creates GitHub milestones for trac milestones
+  def migrate_milestones()
+    $logger.info('Migrating milestones')
+    # Retrieve existing milestones on GitHub repo
+    existing_milestones = @github_client.list_milestones(@repo,{:state => 'all'})
+    $logger.debug("Existing milestones: #{existing_milestones.length}")
+    existing_milestones.each do |milestone|
+      @milestonemap[milestone.title] = milestone.number
+      $logger.debug("Existing milestone #{milestone.title} mapped")
+    end
+
+    # Retrieve milestones from trac db
+    @trac.milestones.all.each do |milestone|
+      $logger.debug("Checking Trac milestone #{milestone[:name]}")
+      if (@milestonemap[milestone[:name]])
+        $logger.info("Milestone #{milestone[:name]} already exists, skipping")
+      else
+        $logger.debug("Milestone: #{milestone[:name]} due #{milestone[:due]} completed #{milestone[:completed]}")
+        # Import to GitHub
+        state = 'open'
+        if milestone[:completed] > 0
+          state = 'closed'
+        end
+
+        #Converting description
+        milestone_description = "Migrated from Trac milestone [#{milestone[:name]}](#{@trac.url}/milestone/#{milestone[:name]})"
+        $logger.debug("Milestone description: #{milestone_description}")
+
+        # Create milestone on GitHub
+        if milestone[:due] > 0
+        milestone_due = format_time(milestone[:due])
+        $logger.debug("Milestone due: #{milestone_due}")
+        new_milestone = @github_client.create_milestone(@repo, milestone[:name], {:description => milestone_description,
+          :state => state,
+          :due_on => milestone_due})  
+        else
+          new_milestone = @github_client.create_milestone(@repo, milestone[:name], {:description => milestone_description,
+            :state => state}) 
+        end
+        $logger.info("New GitHub milestone ID #{new_milestone.number} #{new_milestone.title} due on #{new_milestone.due_on}")
+        # Create mapping of GitHub milestones for matching to trac milestones
+        @milestonemap[new_milestone.title] = new_milestone.number
+        $logger.debug("Milestone map #{new_milestone.title} = #{ @milestonemap[new_milestone.title]}")
+      end
+    end
   end
 
   # Creates github issues for trac tickets.
@@ -162,7 +218,7 @@ class Migrator
   def compose_issue(ticket)
 
     body = ""
-    body += "*Issue migrated from trac ticket # #{ticket[:id]}*\n\n"
+    body += "*Issue migrated from trac ticket # [#{ticket[:id]}](#{@trac.url}/ticket/#{ticket[:id]})*\n\n"
     closed = nil
 
     # summary line:
@@ -227,6 +283,12 @@ class Migrator
     end
     if issue["closed"] and closed
       issue["closed_at"] = format_time(closed)
+    end
+
+    if @importmilestone
+      $logger.debug("Retrieving milestone ID for milestone #{ticket[:milestone]}")
+      issue["milestone"] = @milestonemap[ticket[:milestone]]
+      $logger.debug("Ticket assigned to milestone #{issue["milestone"]}")
     end
 
     return {
@@ -320,7 +382,7 @@ class Migrator
   end
 
   def markdownify(str)
-    $logger.debug("Markdownifying #{str}")
+    #$logger.debug("Markdownifying #{str}")
     # Line endings
     str.gsub!("\r\n", "\n")
     # CommitTicketReference
@@ -349,12 +411,10 @@ class Migrator
     str.gsub!(/https?:\/\/svnweb.cern.ch\/trac\/madx\/changeset\/(\d+)\/?/, '[changeset:\1]')
     str.gsub!(/\[changeset:"r(\d+)".*\]/, '[changeset:\1]')
     str.gsub!(/\[changeset:r(\d+)\]/,     '[changeset:\1]')
+    str.gsub!(/\br(\d+)\b/)              { map_changeset(Regexp.last_match[1]) }
     str.gsub!(/\[changeset:"(\d+)".*\]/) { map_changeset(Regexp.last_match[1]) }
-    $logger.debug("Markdownify found rev type 1, replacing to #{str}")
     str.gsub!(/\[changeset:(\d+)\]/)     { map_changeset(Regexp.last_match[1]) }
-    $logger.debug("Markdownify found rev type 2, replacing to #{str}")
-    #str.gsub!(/\br(\d+)\b/)              { map_changeset(Regexp.last_match[1]) }
-    #$logger.debug("Markdownify found rev type 3, replacing to #{str}")
+    
     # Ticket
     str.gsub!(/ticket:(\d+)/, '#\1')
     # set the body as a comment
@@ -365,14 +425,17 @@ class Migrator
 end
 
 class Trac
-  attr_reader :tickets, :changes, :sessions, :attachments
-  def initialize(db)
+  attr_reader :tickets, :changes, :sessions, :attachments, :milestones, :url
+  def initialize(db, trac_url)
     $logger.info('loading tickets')
     @db = db
     @tickets = @db[:ticket]
     @changes = @db[:ticket_change]
     @sessions = @db[:session_attribute]
     @attachments = @db[:attachment]
+    $logger.info('loading milestones')
+    @milestones = @db[:milestone]
+    @url = trac_url
   end
 end
 
@@ -394,7 +457,7 @@ class Options < Hash
       opts.on('-l', '--log-file FILE',
         'allows to also log to FILE') do |logfile|
         self[:logfile] = logfile
-end
+      end
       opts.on('-r', '--rev-map-file FILE',
               'allows to specify a commit revision mapping FILE') do |file|
         self[:revmapfile] = file
@@ -410,6 +473,10 @@ end
       opts.on('-F', '--fast-import',
               'Import without safety-checking issue numbers.') do |fast|
         self[:fast] = fast
+      end
+      opts.on('-m', '--milestone',
+        'Import milestones and assigns them to issues.') do |m|
+        self[:importmilestone] = m
       end
       opts.on('-o', '--opened-only', 'Skips the import of closed tickets') do |o|
         self[:openedonly] = o
@@ -439,17 +506,23 @@ if __FILE__ == $0
   cfg = YAML.load_file(opts[:config])
 
   # Setup logger.
-  $logger = Logging.logger['trac-hub-logger']
-  $logger.add_appenders(Logging.appenders.stderr)
-  if opts[:logfile]
-    $logger.add_appenders(Logging.appenders.rolling_file(opts[:logfile],:age => 3600))
-  end
-  $logger.level = opts[:verbose] ? :debug : :info
   #$logger.formatter = proc do |severity, datetime, progname, msg|
   #  time = datetime.strftime('%Y-%m-%d %H:%M:%S')
   #  "[#{time}] #{severity}#{' ' * (5 - severity.size + 1)}| #{msg}\n"
   #end
 
+  $logger = Logging.logger['trac-hub-logger']
+  
+  layout = Logging.layouts.pattern \
+    :pattern      => '[%d] %-5l %c: %m\n',
+    :date_pattern => '%Y-%m-%d %H:%M:%S'
+  
+  $logger.add_appenders(Logging.appenders.stderr(:layout => layout))
+  if opts[:logfile]
+    $logger.add_appenders(Logging.appenders.rolling_file(opts[:logfile],:age => 3600,:layout => layout))
+  end
+  $logger.level = opts[:verbose] ? :debug : :info
+  
   # Setup database.
   db = nil
   if db_url = cfg['trac']['database']
@@ -474,9 +547,9 @@ if __FILE__ == $0
     end
   end
 
-  trac = Trac.new(db)
+  trac = Trac.new(db, cfg['trac']['url'])
   migrator = Migrator.new(
       trac, cfg['github'], cfg['users'], cfg['labels'], revmap,
-      opts[:attachurl], opts[:singlepost], (not opts[:fast]))
+      opts[:attachurl], opts[:singlepost], (not opts[:fast]), opts[:importmilestone])
   migrator.migrate(opts[:start], opts[:openedonly])
 end
