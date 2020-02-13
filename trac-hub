@@ -486,7 +486,7 @@ class Migrator
         # so there is no need to update)
         text += "_edited the issue description_"
 
-      when 'keywords', 'cc', 'reporter', 'version'
+      when 'keywords', 'cc', 'reporter', 'version', 'milestone', 'backported', 'backport_to_milestone'
         # don't care
         return nil
     end
