@@ -112,6 +112,12 @@ class Migrator
     time = Time.at(time/1e6, time%1e6)
     return time.strftime("%FT%TZ")
   end
+  
+  # Format date for github API
+  def format_date(time)
+    time = Time.at(time/1e6, time%1e6)
+    return time.strftime("%Y-%m-%d")
+  end
 
   # Creates GitHub milestones for trac milestones
   def migrate_milestones()
@@ -131,15 +137,22 @@ class Migrator
         $logger.info("Milestone #{milestone[:name]} already exists, skipping")
       else
         $logger.debug("Milestone: #{milestone[:name]} due #{milestone[:due]} completed #{milestone[:completed]}")
+        
+        #Converting description
+        milestone_description = "Migrated from Trac milestone [#{milestone[:name]}](#{@trac.url}/milestone/#{milestone[:name]})"
+                       
         # Import to GitHub
         state = 'open'
         if milestone[:completed] > 0
           state = 'closed'
+          if milestone[:due] > 0
+          	milestone_due = format_date(milestone[:due])
+          	milestone_description += " | Due on #{milestone_due}"
+          end
+          milestone_close = format_date(milestone[:completed])
+          milestone_description += " | Closed on #{milestone_close}"
         end
-
-        #Converting description
-        milestone_description = "Migrated from Trac milestone [#{milestone[:name]}](#{@trac.url}/milestone/#{milestone[:name]})"
-        $logger.debug("Milestone description: #{milestone_description}")
+       $logger.debug("Milestone description: #{milestone_description}")
 
         # Create milestone on GitHub
         if milestone[:due] > 0
