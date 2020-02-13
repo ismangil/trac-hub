@@ -91,8 +91,8 @@ class Migrator
   def trac_mail(author)
     return @trac_mails_cache[author] if @trac_mails_cache.has_key?(author)
     # tries to retrieve the email from trac db
-    data = @trac.sessions.select(:value).where('name = "email" AND sid = ?', author)
-    return (@trac_mails_cache[author] = data.first[:value]) if data.count == 1
+    #data = @trac.sessions.select(:value).where('name = "email" AND sid = ?', author)
+    #return (@trac_mails_cache[author] = data.first[:value]) if data.count == 1
     return (@trac_mails_cache[author] = author) # not found
   end
 
@@ -218,14 +218,16 @@ class Migrator
   def compose_issue(ticket)
 
     body = ""
-    body += "*Issue migrated from trac ticket # [#{ticket[:id]}](#{@trac.url}/ticket/#{ticket[:id]})*\n\n"
+    # nn-disabled this line
+    #body += "*Issue migrated from trac ticket # [#{ticket[:id]}](#{@trac.url}/ticket/#{ticket[:id]})*\n\n"
     closed = nil
 
     # summary line:
-    body += [:component, :priority, :resolution, :keywords].map{
-        |cat| ticket[cat] and not ticket[cat].lstrip.empty? and
-              "**#{cat.to_s}:** #{ticket[cat]}"
-    }.select{|x| x}.join(" | ")
+    # nn-disabled this label line
+    #body += [:component, :priority, :resolution, :keywords].map{
+    #    |cat| ticket[cat] and not ticket[cat].lstrip.empty? and
+    #          "**#{cat.to_s}:** #{ticket[cat]}"
+    #}.select{|x| x}.join(" | ")
 
     # Initial report
     # TODO: respect ticket[:changetime]
@@ -320,37 +322,39 @@ class Migrator
 
     text = ""
     text += "\n___\n" if append
-    text += "#### #{time.strftime("%Y-%m-%d %H:%M:%S")}: #{author} "
+    text += "_#{time.strftime("%Y-%m-%d %H:%M:%S")}: #{author}_ "
 
     case kind
       when 'owner', 'status', 'title', 'resolution', 'priority', 'component', 'type', 'severity', 'platform'
         old = meta[:oldvalue]
         new = meta[:newvalue]
         if old and new
-          text += "changed #{kind} from *#{old}* to *#{new}*"
+          text += "_changed **#{kind}** from **#{old}** to **#{new}**_"
         elsif old
-          text += "removed #{kind} (was *#{old}*)"
+          text += "_removed **#{kind}** (was #{old})_"
         elsif new
-          text += "set #{kind} to *#{new}*"
+          text += "_set **#{kind}** to **#{new}**_"
         end
 
       when :initial
         body = meta[:newvalue]
-        text += "created the issue\n\n"
+        text += "_created the issue on trac ticket [#{meta[:ticket]}](#{@trac.url}/ticket/#{meta[:ticket]})_\n\n"
         if body and not body.lstrip.empty?
-            text += "\n___\n" if not append
+            # nn
+            #text += "\n___\n" if not append
             text += markdownify(body)
         end
 
       when 'comment'
         body = meta[:newvalue]
-        text += "commented\n\n"
-        text += "\n___\n" if not append
+        text += "_commented_\n\n"
+        # nn
+        #text += "\n___\n" if not append
         text += markdownify(body) if body
         return nil if body == nil or body.lstrip.empty?
 
       when 'attachment'
-        text += "uploaded file "
+        text += "_uploaded file_ "
         name = meta[:filename]
         body = meta[:description]
         if @attachurl
@@ -362,13 +366,13 @@ class Migrator
         else
           text += "`#{name}`"
         end
-        text += " (#{(meta[:size]/1024.0).round(1)} KiB)"
+        text += " _(#{(meta[:size]/1024.0).round(1)} KiB)_"
         text += "\n\n" + body
 
       when 'description'
         # (ticket[:description] already contains the new value,
         # so there is no need to update)
-        text += "edited the issue description"
+        text += "_edited the issue description_"
 
       when 'keywords', 'cc', 'reporter', 'version'
         # don't care
@@ -414,12 +418,16 @@ class Migrator
     str.gsub!(/\br(\d+)\b/)              { map_changeset(Regexp.last_match[1]) }
     str.gsub!(/\[changeset:"(\d+)".*\]/) { map_changeset(Regexp.last_match[1]) }
     str.gsub!(/\[changeset:(\d+)\]/)     { map_changeset(Regexp.last_match[1]) }
+
+    # URL to wiki
+    str.gsub!(/\[wiki:([^\s]+) (.*)\]/, "[\\2](#{@trac.url}/wiki/\\1)")
     
     # Ticket
     str.gsub!(/ticket:(\d+)/, '#\1')
     # set the body as a comment
-    str.gsub!("\n", "\n> ")
-    str = "> #{str}"
+    # nn - don't set body as quote
+    #str.gsub!("\n", "\n> ")
+    #str = "> #{str}"
     return str
   end
 end
