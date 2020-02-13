@@ -313,6 +313,9 @@ class Migrator
       oldvalue: nil,
       newvalue: ticket[:description],
     })["body"]
+    
+    # bennylp: Remove leading horizontal line
+    body.slice! "\n___\n"
 
     # combine the changes and attachment table results and sort them by date
     changes = @trac.changes.where(:ticket => ticket[:id]).collect.to_a
