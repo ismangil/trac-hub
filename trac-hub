@@ -83,6 +83,7 @@ class Migrator
       migrate_milestones()
     end
     migrate_tickets(start_ticket, filterout_closed)
+#    migrate_releases() 
   end
 
   private
@@ -173,6 +174,58 @@ class Migrator
     end
   end
 
+  def migrate_releases()
+    $logger.info('Migrating releases')
+
+    # Retrieve milestones from trac db
+    @trac.milestones.all.each do |milestone|
+      name = "#{milestone[:name]}"
+      if (name.include? "release") && (milestone[:completed] > 0) &&
+         !((name.include? "cancelled") || (name.include? "QA") || (name.include? "2.0-dev") ||
+           (name.include? "1.0.4") || (name.include? "0.7.0-rc2") || (name.include? "0.6.0"))
+
+        # Import to GitHub
+        $logger.info("Importing Trac milestone #{milestone[:name]}")
+
+        # Create release on GitHub
+        if milestone[:completed] > 0
+          tag_name = "#{milestone[:name]}"
+          # Strip string "release-" to get tag name
+          tag_name.slice! "release-"
+          release_name = "PJSIP version #{tag_name}"
+
+          release_date = format_time(milestone[:completed])
+          release_body = "Released on #{release_date}\n"
+          release_body += "#{milestone[:description]}"
+          release_body = markdownify(release_body)
+          release_body.gsub!("[[BR]]", '')
+
+	  # Remove everything after ticket list
+          ticket_idx = release_body.index("Ticket List")
+          if !ticket_idx
+	    ticket_idx = release_body.index("[[TicketQuery")
+	  end
+          if ticket_idx
+            release_body = release_body[0, ticket_idx]
+          end
+          
+          release_body += "\nFor more details about the ticket list, please see <a href=\"https://trac.pjsip.org/repos/milestone/release-#{tag_name}\">Release Notes</a>" 
+          
+          @github_client.create_release(@repo, tag_name, {:name => release_name,
+          			        		  :body => release_body})
+
+#	  This is to update release. Use this after the release has been created
+#          release = @github_client.release_for_tag(@repo, tag_name, {})
+#          if release && release.url
+#            @github_client.update_release(release.url, {:name => release_name,
+#							 :body => release_body})
+#          end
+
+        end
+      end
+    end
+  end
+
   # Creates github issues for trac tickets.
   def migrate_tickets(start_ticket, filterout_closed)
     $logger.info('migrating issues')
@@ -206,7 +259,12 @@ class Migrator
 
       if @safetychecks
         while response["status"] == "pending"
-          sleep 2 # bennylp
+          # bennylp
+          if @singlepost
+            sleep 1
+          else
+            sleep 2
+          end
           $logger.info("Checking import status: #{response['id']}")
           response = JSON.parse(RestClient.get(response['url'], {
             "Authorization" => "token #{@token}",
@@ -255,6 +313,9 @@ class Migrator
       oldvalue: nil,
       newvalue: ticket[:description],
     })["body"]
+    
+    # bennylp: Remove leading horizontal line
+    body.slice! "\n___\n"
 
     # combine the changes and attachment table results and sort them by date
     changes = @trac.changes.where(:ticket => ticket[:id]).collect.to_a
@@ -325,7 +386,7 @@ class Migrator
       if @users.has_key?(assignee) 
          assignee = @users[assignee]
          issue['assignee'] = assignee
-         puts "assignee set to #{assignee}"
+         $logger.debug("assignee set to #{assignee}")
       else
          puts "User #{assignee} not found"
       end
@@ -425,7 +486,7 @@ class Migrator
         # so there is no need to update)
         text += "_edited the issue description_"
 
-      when 'keywords', 'cc', 'reporter', 'version'
+      when 'keywords', 'cc', 'reporter', 'version', 'milestone', 'backported', 'backport_to_milestone'
         # don't care
         return nil
     end
