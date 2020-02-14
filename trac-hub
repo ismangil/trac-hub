@@ -440,6 +440,15 @@ class Migrator
       when 'owner', 'status', 'title', 'resolution', 'priority', 'component', 'type', 'severity', 'platform', 'milestone'
         old = meta[:oldvalue] if meta[:oldvalue] and !meta[:oldvalue].empty?
         new = meta[:newvalue] if meta[:newvalue] and !meta[:newvalue].empty?
+        if kind=='owner'
+          if old and @users.has_key?(old)
+            old = "@" + @users[old]
+          end
+          if new and @users.has_key?(new)
+            new = "@" + @users[new]
+          end
+        end
+
         if old and new
           text += "_changed **#{kind}** from **#{old}** to **#{new}**_"
         elsif old
