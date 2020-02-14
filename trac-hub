@@ -84,10 +84,10 @@ class Migrator
     if @importmilestone
       migrate_milestones()
     end
-    migrate_tickets(start_ticket, filterout_closed)
     if @importrelease
       migrate_releases()
     end
+    migrate_tickets(start_ticket, filterout_closed)
   end
 
   private
@@ -202,10 +202,12 @@ class Migrator
           release_body = "Released on #{release_date}\n"
           release_body += "#{milestone[:description]}"
           release_body = markdownify(release_body)
-          release_body.gsub!("[[BR]]", '')
 
 	  # Remove everything after ticket list
-          ticket_idx = release_body.index("Ticket List")
+          ticket_idx = release_body.index("## Ticket List")
+          if !ticket_idx
+            ticket_idx = release_body.index("## List of")
+          end
           if !ticket_idx
             ticket_idx = release_body.index("[[TicketQuery")
           end
