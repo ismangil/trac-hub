@@ -38,7 +38,7 @@ class GracefulQuit
 end
 
 class Migrator
-  def initialize(trac, github, users, labels, revmap, attachurl, singlepost, safetychecks, importmilestone)
+  def initialize(trac, github, users, labels, revmap, attachurl, singlepost, safetychecks, importmilestone, importrelease, updaterelease)
     @trac = trac
     @repo = github['repo']
     @token = github["token"]
@@ -68,6 +68,8 @@ class Migrator
     @singlepost = singlepost
     @safetychecks = safetychecks
     @importmilestone =  importmilestone
+    @importrelease = importrelease
+    @updaterelease = updaterelease
     @milestonemap = {}
 
     @github_client = Octokit::Client.new(:access_token => @token)
@@ -83,7 +85,9 @@ class Migrator
       migrate_milestones()
     end
     migrate_tickets(start_ticket, filterout_closed)
-#    migrate_releases() 
+    if @importrelease
+      migrate_releases()
+    end
   end
 
   private
@@ -203,23 +207,29 @@ class Migrator
 	  # Remove everything after ticket list
           ticket_idx = release_body.index("Ticket List")
           if !ticket_idx
-	    ticket_idx = release_body.index("[[TicketQuery")
-	  end
+            ticket_idx = release_body.index("[[TicketQuery")
+          end
           if ticket_idx
             release_body = release_body[0, ticket_idx]
           end
           
           release_body += "\nFor more details about the ticket list, please see <a href=\"https://trac.pjsip.org/repos/milestone/release-#{tag_name}\">Release Notes</a>" 
           
-          @github_client.create_release(@repo, tag_name, {:name => release_name,
-          			        		  :body => release_body})
-
-#	  This is to update release. Use this after the release has been created
-#          release = @github_client.release_for_tag(@repo, tag_name, {})
-#          if release && release.url
-#            @github_client.update_release(release.url, {:name => release_name,
-#							 :body => release_body})
-#          end
+          begin
+            @github_client.create_release(@repo, tag_name, {:name => release_name,
+                                                            :body => release_body})
+          rescue
+            if @updaterelease
+              $logger.info("Updating existing release")
+              release = @github_client.release_for_tag(@repo, tag_name, {})
+              if release && release.url
+                @github_client.update_release(release.url, {:name => release_name,
+                                                            :body => release_body})
+              end
+            else
+              $logger.info("Release already exists")
+            end
+          end
 
         end
       end
@@ -610,6 +620,14 @@ class Options < Hash
         'Import milestones and assigns them to issues.') do |m|
         self[:importmilestone] = m
       end
+      opts.on('-R', '--release',
+        'Import milestones and create releases.') do |rel|
+        self[:importrelease] = rel
+      end
+      opts.on('-u', '--update-release',
+        'Import milestones and update release if exists, instead of skipping it.') do |u|
+        self[:updaterelease] = u
+      end
       opts.on('-o', '--opened-only', 'Skips the import of closed tickets') do |o|
         self[:openedonly] = o
       end
@@ -682,6 +700,7 @@ if __FILE__ == $0
   trac = Trac.new(db, cfg['trac']['url'])
   migrator = Migrator.new(
       trac, cfg['github'], cfg['users'], cfg['labels'], revmap,
-      opts[:attachurl], opts[:singlepost], (not opts[:fast]), opts[:importmilestone])
+      opts[:attachurl], opts[:singlepost], (not opts[:fast]), opts[:importmilestone],
+      opts[:importrelease], opts[:updaterelease])
   migrator.migrate(opts[:start], opts[:openedonly])
 end
