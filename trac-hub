@@ -390,7 +390,7 @@ class Migrator
     # bennylp:
     # Assign the ticket to whoever comment with revision, else whoever comment first
     if assignee == '' and first_commenter != ''
-      assignee = first_commenter
+      #assignee = first_commenter
     end
     if assignee != ''
       if @users.has_key?(assignee) 
