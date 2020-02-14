@@ -437,7 +437,7 @@ class Migrator
     text += "_#{time.strftime("%Y-%m-%d %H:%M:%S")}: #{author}_ "
 
     case kind
-      when 'owner', 'status', 'title', 'resolution', 'priority', 'component', 'type', 'severity', 'platform'
+      when 'owner', 'status', 'title', 'resolution', 'priority', 'component', 'type', 'severity', 'platform', 'milestone'
         old = meta[:oldvalue] if meta[:oldvalue] and !meta[:oldvalue].empty?
         new = meta[:newvalue] if meta[:newvalue] and !meta[:newvalue].empty?
         if old and new
@@ -486,7 +486,7 @@ class Migrator
         # so there is no need to update)
         text += "_edited the issue description_"
 
-      when 'keywords', 'cc', 'reporter', 'version', 'milestone', 'backported', 'backport_to_milestone'
+      when 'keywords', 'cc', 'reporter', 'version', 'backported', 'backport_to_milestone'
         # don't care
         return nil
     end
