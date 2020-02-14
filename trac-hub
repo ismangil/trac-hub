@@ -377,8 +377,8 @@ class Migrator
 
     case kind
       when 'owner', 'status', 'title', 'resolution', 'priority', 'component', 'type', 'severity', 'platform'
-        old = meta[:oldvalue]
-        new = meta[:newvalue]
+        old = meta[:oldvalue] if meta[:oldvalue] and !meta[:oldvalue].empty?
+        new = meta[:newvalue] if meta[:newvalue] and !meta[:newvalue].empty?
         if old and new
           text += "_changed **#{kind}** from **#{old}** to **#{new}**_"
         elsif old
